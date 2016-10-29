@@ -47,10 +47,22 @@ var simpleComparators = {
     $exists:function(docValue,operand) {return (docValue !== undefined) === operand},
 
     $in:function(docVal,operand) {
-        return operand.indexOf(docVal) !== -1
+        if(Array.isArray(docVal)) {
+            return docVal.some(function(val) {
+                return operand.indexOf(val) !== -1;
+            });
+        } else {
+            return operand.indexOf(docVal) !== -1
+        }
     },
     $nin:function(docVal,operand) {
-        return operand.indexOf(docVal) === -1
+        if(Array.isArray(docVal)) {
+            return docVal.every(function(val) {
+                return operand.indexOf(val) === -1;
+            });
+        } else {
+            return operand.indexOf(docVal) === -1
+        }
     },
     $all:function(docVal,operand) {
         return docVal instanceof Array && docVal.reduce(function(last,cur) {
@@ -89,8 +101,9 @@ var compoundOperatorComparators = {
     }
 }
 
-var matches = module.exports = function(parts, document) {
-    validateDocumentObject(document)
+var matches = module.exports = function(parts, document, validate) {
+    if(validate !== false)
+        validateDocumentObject(document)
 
     for(var n=0; n<parts.length; n++) {
         var part = parts[n]

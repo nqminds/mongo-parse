@@ -314,6 +314,15 @@ Unit.test("mongo-parse", function(t) {
             this.eq(pointerz[2].val, 3)
             this.eq(pointerz[3].val, 4)
         })
+
+        this.test('creating properties', function() {
+          var theObject = {};
+          var pointerz = DotNotationPointers(theObject, "a.b");
+          this.eq(pointerz.length, 1);
+
+          pointerz[0].val = 1;
+          this.eq(theObject.a.b, 1);
+        });
     })
 
     this.test('mapValues', function(t) {
@@ -685,6 +694,25 @@ Unit.test("mongo-parse", function(t) {
             this.ok(!parsedQuery.matches({x:1}))
         })
 
+        this.test("inclusive", function() {
+            this.eq(parser.inclusive({a:1}), true)
+            this.eq(parser.inclusive({_id:1}), true)      // mongo apparently cares if _id is explicitly included, but not if its explicitly excluded
+            this.eq(parser.inclusive({a:true}), true)
+            this.eq(parser.inclusive({a:45}), true)
+            this.eq(parser.inclusive({'a.$':1}), true)
+            this.eq(parser.inclusive({_id:0, a:45}), true)
+            this.eq(parser.inclusive({$meta:'textScore'}), true)
+
+            this.eq(parser.inclusive({a:0}), false)
+            this.eq(parser.inclusive({a:false}), false)
+
+            this.eq(parser.inclusive({}), undefined)
+            this.eq(parser.inclusive({_id:0}), undefined)
+            this.eq(parser.inclusive({a:{$elemMatch:{x:1}}}), undefined)
+            this.eq(parser.inclusive({a:{$slice:4}}), undefined)
+            this.eq(parser.inclusive({a:{$slice:[2,3]}}), undefined)
+        })
+
         this.test("errors", function() {
             this.count(2)
 
@@ -705,8 +733,51 @@ Unit.test("mongo-parse", function(t) {
 
     })
 
+    this.test('$in array match', function() {
+
+        var parsedQuery = parser.parse({
+            tags:{ $in:['a','b']}
+        });
+
+        this.ok(parsedQuery.matches({ tags:['a', 'b', 'c'] }));
+        this.ok(parsedQuery.matches({ tags:['a'] }));
+        this.ok(parsedQuery.matches({ tags:'a' }));
+
+        this.ok(!parsedQuery.matches({ tags:[] }));
+        this.ok(!parsedQuery.matches({ tags:['d'] }));
+        this.ok(!parsedQuery.matches({ tags:['d', 'e'] }));
+        this.ok(!parsedQuery.matches({ tags:null }));
+        this.ok(!parsedQuery.matches({ tags:'' }));
+    });
+
+    this.test('$nin array match', function() {
+
+        var parsedQuery = parser.parse({
+            tags:{ $nin:['a','b']}
+        });
+
+        this.ok(!parsedQuery.matches({ tags:['a', 'b', 'c'] }));
+        this.ok(!parsedQuery.matches({ tags:['a'] }));
+        this.ok(!parsedQuery.matches({ tags:'a' }));
+
+        this.ok(parsedQuery.matches({ tags:[] }));
+        this.ok(parsedQuery.matches({ tags:['d'] }));
+        this.ok(parsedQuery.matches({ tags:['d', 'e'] }));
+        this.ok(parsedQuery.matches({ tags:null }));
+        this.ok(parsedQuery.matches({ tags:'' }));
+    })
+
     this.test('searching', function() {
-        // todo
+        var documents = [{x:5,y:{z:10}},{x:7,y:{z:10}},{x:6,y:{z:4}},{x:4,y:{z:6}}]
+
+        var results = parser.search(documents, {x: {$gt:4}}, {x:1})
+        this.ok(deepEqual(results, [{x:5,y:{z:10}}, {x:6,y:{z:4}}, {x:7,y:{z:10}}]))
+
+        results = parser.search(documents, {'y.z': 10}, {x:-1})
+        this.ok(deepEqual(results, [{x:7,y:{z:10}}, {x:5,y:{z:10}}]))
+
+        results = parser.search(documents, {}, {'y.z':1, x:-1})
+        this.ok(deepEqual(results, [{x:6,y:{z:4}},{x:4,y:{z:6}},{x:7,y:{z:10}},{x:5,y:{z:10}}]))
     })
 
     //*/
